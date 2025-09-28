@@ -1,0 +1,6 @@
+@MTP4_2025_HostAddress = http://localhost:5196
+
+GET {{MTP4_2025_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

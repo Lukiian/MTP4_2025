@@ -1,0 +1,202 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AI project</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <aside class="sidebar">
+        <div class="brand"><span class="dot"></span>AI integration</div>
+        <div class="conv-list" id="convList"></div>
+
+        <div style="margin-top:auto; font-size:12px; color:var(--muted)">Tip: Shift+Enter for newline</div>
+    </aside>
+
+    <main class="main">
+        <div class="toolbar">
+            <div class="left">
+                <div class="chip">Chat Demo</div>
+            </div>
+            <div class="actions">
+                <button class="icon-btn" id="themeBtn" title="Toggle theme">🌓</button>
+            </div>
+        </div>
+
+        <div class="container">
+            <div class="chat" id="chat"></div>
+        </div>
+
+        <div class="composer">
+            <div class="composer-inner">
+                <textarea id="input" placeholder="Send a message..."></textarea>
+                <button class="stop" id="stopBtn" disabled>Stop</button>
+                <button class="send" id="sendBtn">Send ➤</button>
+            </div>
+        </div>
+    </main>
+
+    <div class="toast" id="toast"></div>
+
+    <script>
+        // --- Local state ---
+        const chatEl = document.getElementById('chat');
+        const inputEl = document.getElementById('input');
+        const sendBtn = document.getElementById('sendBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const themeBtn = document.getElementById('themeBtn');
+        const convListEl = document.getElementById('convList');
+        const toast = document.getElementById('toast');
+
+        const defaultSettings = { apiUrl: 'https://localhost:7002', endpoint: '/ai/chat' };
+        let settingsFromStorage = localStorage.getItem('settings');
+
+        let settings = settingsFromStorage
+            ? JSON.parse(settingsFromStorage)
+            : defaultSettings;
+
+        let conversations = JSON.parse(localStorage.getItem('conversations') || '[]');
+        let currentId = localStorage.getItem('currentId');
+        if (!currentId) currentId = newChat();
+
+        // --- Theme ---
+        const THEME_KEY = 'theme';
+        function setTheme(t) { document.documentElement.className = t === 'light' ? 'light' : ''; localStorage.setItem(THEME_KEY, t); }
+        setTheme(localStorage.getItem(THEME_KEY) || '');
+        themeBtn.addEventListener('click', () => setTheme(document.documentElement.className === 'light' ? '' : 'light'));
+
+        // --- Conversations ---
+        function newChat() {
+            const id = 'c_' + Date.now();
+            conversations.unshift({ id, title: 'New chat', messages: [] });
+            currentId = id;
+            persist();
+            renderSidebar(); renderChat();
+            return id;
+        }
+        function setCurrent(id) {
+            currentId = id; localStorage.setItem('currentId', id); renderSidebar(); renderChat();
+        }
+        function getCurrent() { return conversations.find(c => c.id === currentId); }
+        function renameCurrent(title) {
+            const c = getCurrent(); c.title = title; persist(); renderSidebar();
+        }
+        function deleteConversation(id) {
+            conversations = conversations.filter(c => c.id !== id);
+            if (!conversations.length) newChat(); else currentId = conversations[0].id;
+            persist(); renderSidebar(); renderChat();
+        }
+        function persist() {
+            localStorage.setItem('conversations', JSON.stringify(conversations));
+            localStorage.setItem('currentId', currentId);
+            localStorage.setItem('settings', JSON.stringify(settings));
+        }
+
+        // --- Rendering ---
+        function renderSidebar() {
+            convListEl.innerHTML = '';
+            conversations.forEach(c => {
+                const div = document.createElement('div'); div.className = 'conv' + (c.id === currentId ? ' active' : '');
+                div.innerHTML = `
+              <div style="width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,var(--accent),var(--accent-2));"></div>
+              <div style="flex:1;min-width:0">
+                <div class="title">${c.title}</div>
+                <div class="meta">${new Date(parseInt(c.id.slice(2))).toLocaleString()}</div>
+              </div>
+              <button class="icon-btn" title="Delete">🗑️</button>`;
+            div.addEventListener('click', (e)=>{ if(e.target.tagName==='BUTTON'){ deleteConversation(c.id); } else { setCurrent(c.id); } });
+            convListEl.appendChild(div);
+          });
+        }
+        function renderChat(){
+          const c = getCurrent(); chatEl.innerHTML = '';
+          c.messages.forEach(m => chatEl.appendChild(messageEl(m.role, m.content)));
+          chatEl.scrollTop = chatEl.scrollHeight;
+        }
+        function messageEl(role, content){
+          const wrap = document.createElement('div'); wrap.className = 'msg ' + role;
+          wrap.innerHTML = `
+            <div class="avatar ${role}">${role==='user'?'U':'A'}</div>
+            <div class="bubble"></div>
+                ${content.includes('```')?' < button class="copy" > Copy</button > ':''}
+                `;
+          const bubble = wrap.querySelector('.bubble');
+          bubble.appendChild(renderMarkdown(content));
+          return wrap;
+        }
+        // Minimal markdown renderer for code blocks and line breaks
+        function renderMarkdown(text){
+          const div = document.createElement('div');
+          const codeBlock = /```([a - z] *) \\n([\\s\\S] *?)```/g;
+          let last = 0, match;
+          while ((match = codeBlock.exec(text))){
+            const before = text.slice(last, match.index);
+            if (before) div.appendChild(document.createTextNode(before));
+            const pre = document.createElement('pre'); const code = document.createElement('code');
+            code.textContent = match[2]; pre.appendChild(code); div.appendChild(pre);
+            last = match.index + match[0].length;
+          }
+          const after = text.slice(last);
+          if (after) div.appendChild(document.createTextNode(after));
+          return div;
+        }
+
+        // --- Composer logic ---
+        function pushMessage(role, content){
+          const c = getCurrent();
+          c.messages.push({ role, content });
+          if (c.title === 'New chat' && role==='assistant'){
+            renameCurrent(content.slice(0, 30).replace(/\\s+/g,' ').trim() || 'Conversation');
+          }
+          persist(); renderChat();
+        }
+
+        async function sendMessage(){
+          const msg = inputEl.value.trim();
+          if (!msg) return;
+          inputEl.value = '';
+          pushMessage('user', msg);
+
+          // Show placeholder assistant bubble with typing dots
+          const placeholder = messageEl('assistant', '...');
+          const bubble = placeholder.querySelector('.bubble');
+          bubble.textContent = 'Thinking';
+          chatEl.appendChild(placeholder);
+          chatEl.scrollTop = chatEl.scrollHeight;
+
+          try {
+            const reply = await callApi(msg);
+            placeholder.remove();
+            pushMessage('assistant', reply);
+          } catch (e){
+            placeholder.remove();
+            pushMessage('assistant', "⚠️ Error: " + e.message);
+          }
+        }
+
+        async function callApi(message) {
+          const url = (settings.apiUrl || '').replace('\\/$/','') + (settings.endpoint || '/chat');
+          const body = { message, conversationId: currentId };
+          const res = await fetch(url, {
+            method:'POST',
+            headers: { 'Content-Type':'application/json' },
+            body: JSON.stringify(body)
+          });
+          if (!res.ok){
+            throw new Error(res.status + ' ' + res.statusText);
+          }
+          const data = await res.json();
+          return data.message ?? JSON.stringify(data);
+        }
+
+        sendBtn.addEventListener('click', sendMessage);
+        inputEl.addEventListener('keydown', (e)=>{
+          if (e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); sendMessage(); }
+        });
+
+        // Initial render
+        renderSidebar(); renderChat();
+    </script>
+</body>
+</html>
