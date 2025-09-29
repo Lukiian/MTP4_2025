@@ -176,7 +176,7 @@
         }
 
         async function callApi(message) {
-          const url = (settings.apiUrl || '').replace('\\/$/','') + (settings.endpoint || '/chat');
+          const url = (settings.apiUrl || '').replace('\\/$/', '') + (settings.endpoint || '/ai/chat');
           const body = { message, conversationId: currentId };
           const res = await fetch(url, {
             method:'POST',
