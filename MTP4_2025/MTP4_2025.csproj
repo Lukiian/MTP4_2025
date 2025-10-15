@@ -12,6 +12,7 @@
 
   <ItemGroup>
     <PackageReference Include="Google_GenerativeAI" Version="3.3.0" />
+    <PackageReference Include="Google_GenerativeAI.Tools" Version="3.3.0" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
   </ItemGroup>
 

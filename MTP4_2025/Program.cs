@@ -12,6 +12,7 @@ builder.Services.AddSwaggerGen();
 
 builder.Services.Configure<GoogleAIOptions>(builder.Configuration.GetSection("GoggleAI"));
 builder.Services.AddSingleton<IGoogleAIKeyProvider, GoogleAIKeyProvider>();
+builder.Services.AddMemoryCache();
 
 var app = builder.Build();
 
